@@ -166,7 +166,7 @@
         }
 
         document.addEventListener('click', function (e) {
-            if (e.target.tagName === 'A' && e.target.href) {
+            if (e.target.tagName === 'A' && e.target.href && !e.target.classList.contains('post-link')) {
                 e.preventDefault();
                 const overlay = document.getElementById('overlay');
                 const iframe = document.getElementById('iframe');
