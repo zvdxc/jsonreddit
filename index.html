@@ -1,0 +1,186 @@
+<html>
+<head>
+    <title>Reddit Client</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border-left-color: #09f;
+            animation: spin 1s ease infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .overlay iframe {
+            width: 80%;
+            height: 80%;
+        }
+        .overlay .close-btn {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: white;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            z-index: 1001;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 font-roboto">
+    <header class="bg-red-600 text-white p-4 flex justify-between items-center">
+        <h1 class="text-xl font-bold">Reddit Client</h1>
+    </header>
+    <div class="container mx-auto p-4">
+        <div class="mb-4">
+            <input type="text" id="subreddit-input" placeholder="Enter subreddit" class="p-2 border border-gray-300 rounded w-full">
+            <button id="fetch-posts" class="mt-2 p-2 bg-blue-500 text-white rounded w-full">Fetch Posts</button>
+        </div>
+        <div id="loading-bar" class="hidden flex justify-center items-center mb-4">
+            <div class="spinner"></div>
+        </div>
+        <div id="posts-container">
+            <!-- Posts will be dynamically inserted here -->
+        </div>
+        <div id="comments-container" class="hidden">
+            <button id="back-to-posts" class="mb-4 p-2 bg-blue-500 text-white rounded">Back to Posts</button>
+            <div id="original-post" class="bg-white p-4 mb-4 rounded shadow">
+                <!-- Original post will be dynamically inserted here -->
+            </div>
+            <div id="comments-list">
+                <!-- Comments will be dynamically inserted here -->
+            </div>
+        </div>
+    </div>
+    <div class="overlay" id="overlay">
+        <button class="close-btn" id="close-overlay">X</button>
+        <iframe id="iframe" src=""></iframe>
+    </div>
+    <script>
+        document.getElementById('fetch-posts').addEventListener('click', async () => {
+            const subreddit = document.getElementById('subreddit-input').value;
+            if (subreddit) {
+                const loadingBar = document.getElementById('loading-bar');
+                loadingBar.classList.remove('hidden');
+                const response = await fetch(`https://www.reddit.com/r/${subreddit}.json`);
+                const data = await response.json();
+                loadingBar.classList.add('hidden');
+                const postsContainer = document.getElementById('posts-container');
+                postsContainer.innerHTML = '';
+                data.data.children.forEach(post => {
+                    const ups = post.data.ups;
+                    const score = post.data.score;
+                    const downs = ups - score;
+                    const postElement = document.createElement('div');
+                    postElement.classList.add('bg-white', 'p-4', 'mb-4', 'rounded', 'shadow');
+                    postElement.innerHTML = `
+                        <h2 class="text-xl font-bold"><a href="#" class="text-blue-500 hover:underline post-link" data-permalink="${post.data.permalink}" data-title="${post.data.title}" data-author="${post.data.author}" data-subreddit="${post.data.subreddit}" data-selftext="${post.data.selftext}" data-ups="${ups}" data-downs="${downs}" data-image="${post.data.preview && post.data.preview.images[0].source.url ? post.data.preview.images[0].source.url.replace(/&amp;/g, '&') : ''}">${post.data.title}</a></h2>
+                        <p class="text-gray-600 text-sm">Posted by <a href="https://www.reddit.com/user/${post.data.author}" target="_blank" class="text-blue-500 hover:underline">${post.data.author}</a> in <a href="https://www.reddit.com/r/${post.data.subreddit}" target="_blank" class="text-blue-500 hover:underline">${post.data.subreddit}</a></p>
+                        ${post.data.preview && post.data.preview.images[0].source.url ? `<img src="${post.data.preview.images[0].source.url.replace(/&amp;/g, '&')}" alt="Image for ${post.data.title}" class="mt-2 rounded">` : ''}
+                        <p class="mt-2">${post.data.selftext_html ? decodeHtml(post.data.selftext_html) : ''}</p>
+                        <div class="flex items-center mt-2">
+                            <i class="fas fa-arrow-up text-green-500"></i>
+                            <span class="mx-2">${ups}</span>
+                            <i class="fas fa-arrow-down text-red-500"></i>
+                            <span class="mx-2">${downs}</span>
+                        </div>
+                    `;
+                    postsContainer.appendChild(postElement);
+                });
+
+                document.querySelectorAll('.post-link').forEach(link => {
+                    link.addEventListener('click', async (e) => {
+                        e.preventDefault();
+                        const permalink = e.target.getAttribute('data-permalink');
+                        const title = e.target.getAttribute('data-title');
+                        const author = e.target.getAttribute('data-author');
+                        const subreddit = e.target.getAttribute('data-subreddit');
+                        const selftext = e.target.getAttribute('data-selftext');
+                        const ups = e.target.getAttribute('data-ups');
+                        const downs = e.target.getAttribute('data-downs');
+                        const image = e.target.getAttribute('data-image');
+
+                        const commentsResponse = await fetch(`https://www.reddit.com${permalink}.json`);
+                        const commentsData = await commentsResponse.json();
+                        const commentsContainer = document.getElementById('comments-container');
+                        const originalPostContainer = document.getElementById('original-post');
+                        const commentsList = document.getElementById('comments-list');
+
+                        originalPostContainer.innerHTML = `
+                            <h2 class="text-xl font-bold"><a href="https://www.reddit.com${permalink}" target="_blank" class="text-blue-500 hover:underline">${title}</a></h2>
+                            <p class="text-gray-600 text-sm">Posted by <a href="https://www.reddit.com/user/${author}" target="_blank" class="text-blue-500 hover:underline">${author}</a> in <a href="https://www.reddit.com/r/${subreddit}" target="_blank" class="text-blue-500 hover:underline">${subreddit}</a></p>
+                            ${image ? `<img src="${image}" alt="Image for ${title}" class="mt-2 rounded">` : ''}
+                            <p class="mt-2">${selftext ? decodeHtml(selftext) : ''}</p>
+                            <div class="flex items-center mt-2">
+                                <i class="fas fa-arrow-up text-green-500"></i>
+                                <span class="mx-2">${ups}</span>
+                                <i class="fas fa-arrow-down text-red-500"></i>
+                                <span class="mx-2">${downs}</span>
+                            </div>
+                        `;
+
+                        commentsList.innerHTML = '';
+                        commentsData[1].data.children.forEach(comment => {
+                            const commentElement = document.createElement('div');
+                            commentElement.classList.add('bg-white', 'p-4', 'mb-4', 'rounded', 'shadow');
+                            commentElement.innerHTML = `
+                                <p class="text-gray-600 text-sm">Comment by <a href="https://www.reddit.com/user/${comment.data.author}" target="_blank" class="text-blue-500 hover:underline">${comment.data.author}</a></p>
+                                <p class="mt-2">${comment.data.body_html ? decodeHtml(comment.data.body_html) : ''}</p>
+                            `;
+                            commentsList.appendChild(commentElement);
+                        });
+
+                        document.getElementById('posts-container').classList.add('hidden');
+                        commentsContainer.classList.remove('hidden');
+                        document.getElementById('back-to-posts').addEventListener('click', () => {
+                            commentsContainer.classList.add('hidden');
+                            document.getElementById('posts-container').classList.remove('hidden');
+                        });
+                    });
+                });
+            }
+        });
+
+        function decodeHtml(html) {
+            const txt = document.createElement('textarea');
+            txt.innerHTML = html;
+            return txt.value;
+        }
+
+        document.addEventListener('click', function (e) {
+            if (e.target.tagName === 'A' && e.target.href) {
+                e.preventDefault();
+                const overlay = document.getElementById('overlay');
+                const iframe = document.getElementById('iframe');
+                iframe.src = e.target.href;
+                overlay.style.display = 'flex';
+            }
+        });
+
+        document.getElementById('close-overlay').addEventListener('click', () => {
+            const overlay = document.getElementById('overlay');
+            const iframe = document.getElementById('iframe');
+            iframe.src = '';
+            overlay.style.display = 'none';
+        });
+    </script>
+</body>
+</html>
